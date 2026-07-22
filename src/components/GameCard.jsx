@@ -206,21 +206,21 @@ export default function GameCard({ onScoreUpdate }) {
           </span>
 
           {/* Language Selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginLeft: '0.2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginLeft: '0.4rem' }}>
             <span style={{ fontSize: '0.8rem', color: 'var(--steam-text-muted)', fontWeight: 600 }}>Lang:</span>
             <button
               type="button"
               onClick={() => toggleLanguage('english')}
               title="Toggle English Reviews"
               style={{
-                background: selectedLangs.includes('english') ? 'rgba(102, 192, 244, 0.2)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${selectedLangs.includes('english') ? 'var(--steam-blue)' : '#2a3a4e'}`,
-                color: selectedLangs.includes('english') ? 'var(--steam-blue)' : '#64748b',
-                padding: '0.2rem 0.55rem',
-                borderRadius: '3px',
-                fontSize: '0.78rem',
+                background: selectedLangs.includes('english') ? '#66c0f4' : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${selectedLangs.includes('english') ? '#66c0f4' : '#2a3a4e'}`,
+                color: selectedLangs.includes('english') ? '#0f172a' : '#94a3b8',
+                padding: '0.25rem 0.65rem',
+                borderRadius: '4px',
+                fontSize: '0.8rem',
                 cursor: 'pointer',
-                fontWeight: 600,
+                fontWeight: 700,
                 transition: 'all 0.2s'
               }}
             >
@@ -231,14 +231,14 @@ export default function GameCard({ onScoreUpdate }) {
               onClick={() => toggleLanguage('turkish')}
               title="Toggle Turkish Reviews"
               style={{
-                background: selectedLangs.includes('turkish') ? 'rgba(102, 192, 244, 0.2)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${selectedLangs.includes('turkish') ? 'var(--steam-blue)' : '#2a3a4e'}`,
-                color: selectedLangs.includes('turkish') ? 'var(--steam-blue)' : '#64748b',
-                padding: '0.2rem 0.55rem',
-                borderRadius: '3px',
-                fontSize: '0.78rem',
+                background: selectedLangs.includes('turkish') ? '#66c0f4' : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${selectedLangs.includes('turkish') ? '#66c0f4' : '#2a3a4e'}`,
+                color: selectedLangs.includes('turkish') ? '#0f172a' : '#94a3b8',
+                padding: '0.25rem 0.65rem',
+                borderRadius: '4px',
+                fontSize: '0.8rem',
                 cursor: 'pointer',
-                fontWeight: 600,
+                fontWeight: 700,
                 transition: 'all 0.2s'
               }}
             >
