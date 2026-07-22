@@ -30,7 +30,8 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
           email,
           password,
           options: {
-            data: { username: username || email.split('@')[0] }
+            data: { username: username || email.split('@')[0] },
+            emailRedirectTo: window.location.origin
           }
         });
 
