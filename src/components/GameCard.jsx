@@ -43,6 +43,18 @@ export default function GameCard({ user, onScoreUpdate }) {
   const [notFoundError, setNotFoundError] = useState('');
   const [failedAvatars, setFailedAvatars] = useState({});
 
+  const handleGameImageError = (e, gameId) => {
+    if (!e.target.dataset.triedFallback1) {
+      e.target.dataset.triedFallback1 = 'true';
+      e.target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${gameId}/header.jpg`;
+    } else if (!e.target.dataset.triedFallback2) {
+      e.target.dataset.triedFallback2 = 'true';
+      e.target.src = `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${gameId}/capsule_231x87.jpg`;
+    } else {
+      e.target.style.display = 'none';
+    }
+  };
+
   const [selectedLangs, setSelectedLangs] = useState(() => {
     try {
       const saved = localStorage.getItem('steam_guesser_langs');
@@ -719,7 +731,7 @@ export default function GameCard({ user, onScoreUpdate }) {
                 <div className="suggestions-dropdown">
                   {suggestions.map((game) => (
                     <div key={game.id} className="suggestion-item" onClick={() => handleSelectSuggestion(game.title)}>
-                      <img src={game.coverImage} alt={game.title} style={{ width: '45px', height: '22px', objectFit: 'cover', borderRadius: '2px' }} />
+                      <img src={game.coverImage} alt={game.title} onError={(e) => handleGameImageError(e, game.id)} style={{ width: '45px', height: '22px', objectFit: 'cover', borderRadius: '2px' }} />
                       <span style={{ fontWeight: 600 }}>{game.title}</span>
                     </div>
                   ))}
@@ -740,7 +752,7 @@ export default function GameCard({ user, onScoreUpdate }) {
           ) : (
             <div className={`result-banner ${gameStatus === 'won' ? 'success' : 'fail'}`} ref={bottomRef}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                <img src={currentGame.coverImage} alt={currentGame.title} style={{ width: '180px', height: '85px', objectFit: 'cover', borderRadius: '4px', boxShadow: '0 5px 20px rgba(0,0,0,0.6)' }} />
+                <img src={currentGame.coverImage} alt={currentGame.title} onError={(e) => handleGameImageError(e, currentGame.id)} style={{ width: '180px', height: '85px', objectFit: 'cover', borderRadius: '4px', boxShadow: '0 5px 20px rgba(0,0,0,0.6)' }} />
                 <div style={{ textAlign: 'left' }}>
                   <div style={{
                     fontSize: '0.9rem',

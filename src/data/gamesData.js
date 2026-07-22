@@ -8,7 +8,7 @@ rawGamesList.forEach(game => {
     uniqueGamesMap.set(strId, {
       id: strId,
       title: game.title,
-      coverImage: `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.id}/header.jpg`
+      coverImage: game.coverImage || `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.id}/header.jpg`
     });
   }
 });
