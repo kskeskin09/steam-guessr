@@ -36,8 +36,13 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
         });
 
         if (error) throw error;
-        alert('Registration successful! You can now sign in.');
-        setIsRegister(false);
+        if (data?.user) {
+          onAuthSuccess(data.user);
+          onClose();
+        } else {
+          alert('Registration successful! You can now sign in.');
+          setIsRegister(false);
+        }
       } else {
         // Sign in user
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -50,7 +55,11 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
         onClose();
       }
     } catch (err) {
-      setErrorMsg(err.message || 'An error occurred during authentication.');
+      if (err.message && err.message.toLowerCase().includes('rate limit')) {
+        setErrorMsg('Supabase e-posta gönderim limiti aşıldı. Lütfen Supabase panelinden "Confirm email" seçeneğini kapatın veya biraz bekleyin.');
+      } else {
+        setErrorMsg(err.message || 'An error occurred during authentication.');
+      }
     } finally {
       setLoading(false);
     }

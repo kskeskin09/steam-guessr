@@ -3,31 +3,65 @@ import Header from './components/Header';
 import GameCard from './components/GameCard';
 import LeaderboardModal from './components/LeaderboardModal';
 import AuthModal from './components/AuthModal';
-import { supabase, saveUserScore } from './lib/supabaseClient';
+import { supabase, saveUserScore, mergeGuestStats } from './lib/supabaseClient';
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [totalScore, setTotalScore] = useState(0);
   const [streak, setStreak] = useState(0);
 
+  // Guest session stats tracking (before login)
+  const [guestScore, setGuestScore] = useState(() => {
+    return parseInt(sessionStorage.getItem('steam_guesser_guest_score') || '0', 10);
+  });
+  const [guestGames, setGuestGames] = useState(() => {
+    return parseInt(sessionStorage.getItem('steam_guesser_guest_games') || '0', 10);
+  });
+
   // Modals
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+
+  // Handle user login and merge any guest session stats
+  const handleUserLogin = async (loggedInUser) => {
+    if (!loggedInUser || !supabase) return;
+    setUser(loggedInUser);
+
+    const sScore = parseInt(sessionStorage.getItem('steam_guesser_guest_score') || '0', 10) || guestScore;
+    const sGames = parseInt(sessionStorage.getItem('steam_guesser_guest_games') || '0', 10) || guestGames;
+
+    if (sScore > 0 || sGames > 0) {
+      await mergeGuestStats(loggedInUser, sScore, sGames);
+
+      // Clear guest session data after successful merge
+      setGuestScore(0);
+      setGuestGames(0);
+      sessionStorage.removeItem('steam_guesser_guest_score');
+      sessionStorage.removeItem('steam_guesser_guest_games');
+    }
+
+    loadUserInitialScore(loggedInUser.id);
+  };
 
   // Check current logged in user
   useEffect(() => {
     if (supabase) {
       supabase.auth.getUser().then(({ data }) => {
         if (data?.user) {
-          setUser(data.user);
-          loadUserInitialScore(data.user.id);
+          handleUserLogin(data.user);
+        } else {
+          // Keep guest score in display if not logged in
+          setTotalScore(guestScore);
         }
       });
 
       const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
         const u = session?.user || null;
-        setUser(u);
-        if (u) loadUserInitialScore(u.id);
+        if (u) {
+          handleUserLogin(u);
+        } else {
+          setUser(null);
+        }
       });
 
       return () => {
@@ -50,18 +84,31 @@ export default function App() {
   };
 
   const handleScoreUpdate = async (pointsGained, isWin) => {
-    if (isWin) {
-      const newScore = totalScore + pointsGained;
-      setTotalScore(newScore);
-      setStreak(prev => prev + 1);
-
-      // Save score to Supabase if logged in
-      if (user && supabase) {
-        await saveUserScore(user, pointsGained);
+    if (user) {
+      // Logged-in user: save directly to Supabase
+      if (isWin) {
+        setTotalScore(prev => prev + pointsGained);
+        setStreak(prev => prev + 1);
+        if (supabase) await saveUserScore(user, pointsGained);
+      } else {
+        setStreak(0);
+        if (supabase) await saveUserScore(user, 0); // Increment games played
       }
     } else {
-      // Loss or Give Up resets streak
-      setStreak(0);
+      // Guest user: save to session state & sessionStorage
+      const newGames = guestGames + 1;
+      setGuestGames(newGames);
+      sessionStorage.setItem('steam_guesser_guest_games', String(newGames));
+
+      if (isWin) {
+        const newScore = guestScore + pointsGained;
+        setGuestScore(newScore);
+        setTotalScore(newScore);
+        setStreak(prev => prev + 1);
+        sessionStorage.setItem('steam_guesser_guest_score', String(newScore));
+      } else {
+        setStreak(0);
+      }
     }
   };
 
@@ -69,6 +116,12 @@ export default function App() {
     if (supabase) {
       await supabase.auth.signOut();
       setUser(null);
+      setTotalScore(0);
+      setStreak(0);
+      setGuestScore(0);
+      setGuestGames(0);
+      sessionStorage.removeItem('steam_guesser_guest_score');
+      sessionStorage.removeItem('steam_guesser_guest_games');
     }
   };
 
@@ -97,7 +150,7 @@ export default function App() {
       <AuthModal 
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
-        onAuthSuccess={(u) => { setUser(u); setIsAuthOpen(false); }}
+        onAuthSuccess={(u) => { handleUserLogin(u); setIsAuthOpen(false); }}
       />
 
       <LeaderboardModal 
@@ -108,3 +161,4 @@ export default function App() {
     </div>
   );
 }
+

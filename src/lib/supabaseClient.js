@@ -81,6 +81,47 @@ export const saveUserScore = async (user, pointsGained) => {
   }
 };
 
+// Merge guest score and games played into user profile when logging in or signing up
+export const mergeGuestStats = async (user, guestScore, guestGames) => {
+  if (!supabase || !user) return null;
+  if (guestScore <= 0 && guestGames <= 0) return null;
+
+  try {
+    const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Oyuncu';
+
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id, total_score, games_played')
+      .eq('id', user.id)
+      .single();
+
+    const addScore = Math.max(0, guestScore);
+    const addGames = Math.max(0, guestGames);
+
+    if (!existingProfile) {
+      await supabase.from('profiles').insert({
+        id: user.id,
+        username: username,
+        total_score: addScore,
+        games_played: addGames
+      });
+      return;
+    }
+
+    const currentTotal = existingProfile.total_score || 0;
+    const currentGames = existingProfile.games_played || 0;
+
+    await supabase.from('profiles').update({
+      username: username,
+      total_score: currentTotal + addScore,
+      games_played: currentGames + addGames,
+      updated_at: new Date().toISOString()
+    }).eq('id', user.id);
+  } catch (e) {
+    console.error("Failed to merge guest stats into Supabase profile:", e);
+  }
+};
+
 // Fetch Leaderboard
 export const fetchLeaderboard = async () => {
   if (!supabase) return [];

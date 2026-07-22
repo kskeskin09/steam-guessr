@@ -179,15 +179,20 @@ export default function GameCard({ onScoreUpdate }) {
       setWrongGuesses(prev => [...prev, matchedGame.title]);
       setUserGuess('');
       setShowDropdown(false);
-      setAttemptCount(prev => prev + 1);
-      if (clueIndex < gameReviews.length - 1) {
+
+      // Auto end round on 10th failed guess
+      if (attemptCount >= 10 || clueIndex >= 9 || clueIndex >= gameReviews.length - 1) {
+        setGameStatus('lost');
+        onScoreUpdate(0, false);
+      } else {
+        setAttemptCount(prev => prev + 1);
         setClueIndex(prev => prev + 1);
       }
     }
   };
 
   const handlePassClue = () => {
-    if (gameStatus !== 'playing' || !currentGame || isLoadingReviews || clueIndex >= gameReviews.length - 1) return;
+    if (gameStatus !== 'playing' || !currentGame || isLoadingReviews || clueIndex >= 9 || clueIndex >= gameReviews.length - 1) return;
     setNotFoundError('');
     setUserGuess('');
     setShowDropdown(false);
@@ -392,15 +397,16 @@ export default function GameCard({ onScoreUpdate }) {
                 type="button"
                 className="btn-steam"
                 onClick={handlePassClue}
-                disabled={isLoadingReviews || clueIndex >= gameReviews.length - 1}
+                disabled={isLoadingReviews || clueIndex >= 9 || clueIndex >= gameReviews.length - 1}
                 style={{
-                  borderColor: clueIndex >= gameReviews.length - 1 ? '#334155' : 'var(--steam-blue-dark)',
-                  color: clueIndex >= gameReviews.length - 1 ? '#64748b' : 'var(--steam-blue)',
-                  opacity: clueIndex >= gameReviews.length - 1 ? 0.6 : 1
+                  borderColor: (clueIndex >= 9 || clueIndex >= gameReviews.length - 1) ? '#334155' : 'var(--steam-blue-dark)',
+                  color: (clueIndex >= 9 || clueIndex >= gameReviews.length - 1) ? '#64748b' : 'var(--steam-blue)',
+                  opacity: (clueIndex >= 9 || clueIndex >= gameReviews.length - 1) ? 0.5 : 1,
+                  cursor: (clueIndex >= 9 || clueIndex >= gameReviews.length - 1) ? 'not-allowed' : 'pointer'
                 }}
               >
                 <SkipForward size={15} />
-                <span>{clueIndex >= gameReviews.length - 1 ? 'No More Clues' : 'Pass Clue'}</span>
+                <span>{clueIndex >= 9 || clueIndex >= gameReviews.length - 1 ? 'No More Clues' : 'Pass Clue'}</span>
               </button>
               <button type="button" className="btn-steam" onClick={handleGiveUp} style={{ borderColor: 'rgba(255, 71, 87, 0.4)', color: 'var(--accent-red)' }}>
                 <Flag size={15} />
@@ -444,7 +450,7 @@ export default function GameCard({ onScoreUpdate }) {
                 color: gameStatus === 'won' ? '#4ade80' : '#ff6b81',
                 marginBottom: '0.25rem'
               }}>
-                {gameStatus === 'won' ? '🎉 CONGRATULATIONS!' : '🏳️ GAVE UP'}
+                {gameStatus === 'won' ? '🎉 CONGRATULATIONS!' : (gameStatus === 'lost' ? '❌ OUT OF ATTEMPTS' : '🏳️ GAVE UP')}
               </div>
               <h2 style={{ fontSize: '1.75rem', color: '#ffffff', fontWeight: 800, margin: 0, lineHeight: 1.2 }}>
                 {currentGame.title}
@@ -461,7 +467,7 @@ export default function GameCard({ onScoreUpdate }) {
             </div>
           ) : (
             <p style={{ color: 'var(--steam-text-muted)', fontSize: '0.9rem' }}>
-              Good luck on the next round!
+              {gameStatus === 'lost' ? 'You used all 10 attempts! The game was revealed above.' : 'Good luck on the next round!'}
             </p>
           )}
 
