@@ -91,10 +91,12 @@ export default function GameCard({ onScoreUpdate }) {
       localStorage.setItem('steam_guesser_langs', JSON.stringify(updated));
     } catch (e) {}
 
-    // Reload reviews for current game with new language selection
+    // Reload reviews for current game with new language selection and reset clues
     if (currentGame) {
       setIsLoadingReviews(true);
       setReviewError('');
+      setClueIndex(0);
+      setFailedAvatars({});
       fetchLiveSteamReviews(currentGame.id, updated)
         .then(liveReviews => {
           setGameReviews(liveReviews);
