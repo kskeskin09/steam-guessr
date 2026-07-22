@@ -180,8 +180,10 @@ export default function GameCard({ onScoreUpdate }) {
       setUserGuess('');
       setShowDropdown(false);
 
-      // Auto end round on 10th failed guess
-      if (attemptCount >= 10 || clueIndex >= 9 || clueIndex >= gameReviews.length - 1) {
+      const maxClues = Math.min(10, gameReviews.length || 10);
+
+      // Auto end round on last attempt / 10th clue
+      if (attemptCount >= maxClues || clueIndex >= maxClues - 1) {
         setGameStatus('lost');
         onScoreUpdate(0, false);
       } else {
@@ -192,7 +194,8 @@ export default function GameCard({ onScoreUpdate }) {
   };
 
   const handlePassClue = () => {
-    if (gameStatus !== 'playing' || !currentGame || isLoadingReviews || clueIndex >= 9 || clueIndex >= gameReviews.length - 1) return;
+    const maxClues = Math.min(10, gameReviews.length || 10);
+    if (gameStatus !== 'playing' || !currentGame || isLoadingReviews || attemptCount >= maxClues || clueIndex >= maxClues - 1) return;
     setNotFoundError('');
     setUserGuess('');
     setShowDropdown(false);
@@ -208,6 +211,8 @@ export default function GameCard({ onScoreUpdate }) {
 
   if (!currentGame) return null;
 
+  const maxClues = Math.min(10, gameReviews.length || 10);
+  const isLastClue = attemptCount >= maxClues || clueIndex >= maxClues - 1;
   const nextPotentialPoints = calculatePoints(attemptCount);
   const revealedReviews = gameReviews.slice(0, clueIndex + 1);
 
@@ -397,16 +402,16 @@ export default function GameCard({ onScoreUpdate }) {
                 type="button"
                 className="btn-steam"
                 onClick={handlePassClue}
-                disabled={isLoadingReviews || clueIndex >= 9 || clueIndex >= gameReviews.length - 1}
+                disabled={isLoadingReviews || isLastClue}
                 style={{
-                  borderColor: (clueIndex >= 9 || clueIndex >= gameReviews.length - 1) ? '#334155' : 'var(--steam-blue-dark)',
-                  color: (clueIndex >= 9 || clueIndex >= gameReviews.length - 1) ? '#64748b' : 'var(--steam-blue)',
-                  opacity: (clueIndex >= 9 || clueIndex >= gameReviews.length - 1) ? 0.5 : 1,
-                  cursor: (clueIndex >= 9 || clueIndex >= gameReviews.length - 1) ? 'not-allowed' : 'pointer'
+                  borderColor: isLastClue ? '#334155' : 'var(--steam-blue-dark)',
+                  color: isLastClue ? '#64748b' : 'var(--steam-blue)',
+                  opacity: isLastClue ? 0.4 : 1,
+                  cursor: isLastClue ? 'not-allowed' : 'pointer'
                 }}
               >
                 <SkipForward size={15} />
-                <span>{clueIndex >= 9 || clueIndex >= gameReviews.length - 1 ? 'No More Clues' : 'Pass Clue'}</span>
+                <span>{isLastClue ? 'No More Clues' : 'Pass Clue'}</span>
               </button>
               <button type="button" className="btn-steam" onClick={handleGiveUp} style={{ borderColor: 'rgba(255, 71, 87, 0.4)', color: 'var(--accent-red)' }}>
                 <Flag size={15} />

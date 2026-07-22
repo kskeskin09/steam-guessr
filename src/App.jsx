@@ -8,6 +8,7 @@ import { supabase, saveUserScore, mergeGuestStats } from './lib/supabaseClient';
 export default function App() {
   const [user, setUser] = useState(null);
   const [totalScore, setTotalScore] = useState(0);
+  const [gamesPlayed, setGamesPlayed] = useState(0);
   const [streak, setStreak] = useState(0);
 
   // Guest session stats tracking (before login)
@@ -50,8 +51,9 @@ export default function App() {
         if (data?.user) {
           handleUserLogin(data.user);
         } else {
-          // Keep guest score in display if not logged in
+          // Keep guest score and games in display if not logged in
           setTotalScore(guestScore);
+          setGamesPlayed(guestGames);
         }
       });
 
@@ -74,17 +76,20 @@ export default function App() {
     if (!supabase || !userId) return;
     const { data } = await supabase
       .from('profiles')
-      .select('total_score')
+      .select('total_score, games_played')
       .eq('id', userId)
       .single();
 
-    if (data && data.total_score !== undefined) {
-      setTotalScore(data.total_score);
+    if (data) {
+      if (data.total_score !== undefined) setTotalScore(data.total_score);
+      if (data.games_played !== undefined) setGamesPlayed(data.games_played);
     }
   };
 
   const handleScoreUpdate = async (pointsGained, isWin) => {
     if (user) {
+      setGamesPlayed(prev => prev + 1);
+
       // Logged-in user: save directly to Supabase
       if (isWin) {
         setTotalScore(prev => prev + pointsGained);
@@ -98,6 +103,7 @@ export default function App() {
       // Guest user: save to session state & sessionStorage
       const newGames = guestGames + 1;
       setGuestGames(newGames);
+      setGamesPlayed(newGames);
       sessionStorage.setItem('steam_guesser_guest_games', String(newGames));
 
       if (isWin) {
@@ -117,6 +123,7 @@ export default function App() {
       await supabase.auth.signOut();
       setUser(null);
       setTotalScore(0);
+      setGamesPlayed(0);
       setStreak(0);
       setGuestScore(0);
       setGuestGames(0);
