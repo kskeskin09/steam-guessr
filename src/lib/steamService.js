@@ -145,79 +145,147 @@ export async function fetchLiveSteamReviews(appId, languages = ["english", "turk
 
 export async function fetchSteamUserLibrary(steamIdInput) {
   if (!steamIdInput || !steamIdInput.trim()) {
-    return { success: false, error: "Please enter a valid Steam ID or Custom Profile URL." };
+    return { success: false, error: "Please enter a valid Steam ID or Profile URL." };
   }
 
-  let cleaned = steamIdInput.trim();
-  // Strip trailing slashes or full URLs if pasted
-  cleaned = cleaned.replace(/^(https?:\/\/)?steamcommunity\.com\/(id|profiles)\//, '').replace(/\/+$/, '');
+  const raw = steamIdInput.trim();
 
-  const isNumeric = /^\d{17}$/.test(cleaned);
-  const xmlUrl = isNumeric
-    ? `https://steamcommunity.com/profiles/${cleaned}/games?tab=all&xml=1`
-    : `https://steamcommunity.com/id/${cleaned}/games?tab=all&xml=1`;
+  // 1. Extract 17-digit numeric SteamID64 (e.g. 76561199244035935) from any URL format
+  const numericMatch = raw.match(/7656119\d{10}/);
+  let cleanedId = '';
+  let isNumeric = false;
 
+  if (numericMatch) {
+    cleanedId = numericMatch[0];
+    isNumeric = true;
+  } else {
+    // 2. Check for vanity URL segment e.g. steamcommunity.com/id/USERNAME/...
+    const vanityMatch = raw.match(/steamcommunity\.com\/id\/([^\/\?#]+)/i);
+    if (vanityMatch) {
+      cleanedId = vanityMatch[1];
+      isNumeric = false;
+    } else {
+      // 3. Strip any remaining URL prefixes or subpaths
+      cleanedId = raw.replace(/^(https?:\/\/)?(www\.)?steamcommunity\.com\/(id|profiles)\//i, '');
+      cleanedId = cleanedId.split('/')[0].split('?')[0].split('#')[0].trim();
+      isNumeric = /^\d{17}$/.test(cleanedId);
+    }
+  }
+
+  if (!cleanedId) {
+    return { success: false, error: "Could not extract a valid Steam ID or Custom URL from your input." };
+  }
+
+  const relativePath = isNumeric
+    ? `profiles/${cleanedId}?xml=1`
+    : `id/${cleanedId}?xml=1`;
+
+  const fullTargetUrl = `https://steamcommunity.com/${relativePath}`;
+  const localProxyUrl = `/api/steamcommunity/${relativePath}`;
+
+  // Concurrent fetch strategies (Vite dev proxy, Direct fetch, and multiple CORS proxies)
+  const fetchStrategies = [
+    // 1. Vite dev proxy (fastest during npm run dev)
+    async () => {
+      const res = await fetch(localProxyUrl, { signal: AbortSignal.timeout(4000) });
+      if (!res.ok) throw new Error("Local proxy failed");
+      const text = await res.text();
+      if (!text || (!text.includes("<profile>") && !text.includes("<error>"))) throw new Error("Invalid local proxy content");
+      return text;
+    },
+    // 2. Direct fetch
+    async () => {
+      const res = await fetch(fullTargetUrl, { signal: AbortSignal.timeout(4000) });
+      if (!res.ok) throw new Error("Direct fetch failed");
+      const text = await res.text();
+      if (!text || (!text.includes("<profile>") && !text.includes("<error>"))) throw new Error("Invalid direct fetch content");
+      return text;
+    },
+    // 3. allorigins.win API
+    async () => {
+      const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(fullTargetUrl)}`, { signal: AbortSignal.timeout(7000) });
+      if (!res.ok) throw new Error("allorigins failed");
+      const json = await res.json();
+      const text = json?.contents;
+      if (!text || (!text.includes("<profile>") && !text.includes("<error>"))) throw new Error("Invalid allorigins content");
+      return text;
+    },
+    // 4. codetabs.com proxy
+    async () => {
+      const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fullTargetUrl)}`, { signal: AbortSignal.timeout(7000) });
+      if (!res.ok) throw new Error("codetabs failed");
+      const text = await res.text();
+      if (!text || (!text.includes("<profile>") && !text.includes("<error>"))) throw new Error("Invalid codetabs content");
+      return text;
+    },
+    // 5. corsproxy.io
+    async () => {
+      const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(fullTargetUrl)}`, { signal: AbortSignal.timeout(7000) });
+      if (!res.ok) throw new Error("corsproxy failed");
+      const text = await res.text();
+      if (!text || (!text.includes("<profile>") && !text.includes("<error>"))) throw new Error("Invalid corsproxy content");
+      return text;
+    }
+  ];
+
+  let xmlContent = null;
   try {
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(xmlUrl)}`, {
-      signal: AbortSignal.timeout(10000),
-    });
+    xmlContent = await Promise.any(fetchStrategies.map(fn => fn()));
+  } catch (err) {
+    console.error("All fetch strategies failed for Steam library:", err);
+  }
 
-    if (!res.ok) {
-      return { success: false, error: "Unable to reach Steam services. Please check your connection." };
-    }
+  if (!xmlContent || typeof xmlContent !== "string") {
+    return { success: false, error: "Unable to reach Steam services. Please check your internet connection or try again." };
+  }
 
-    const json = await res.json();
-    const xmlContent = json?.contents;
-
-    if (!xmlContent || typeof xmlContent !== "string") {
-      return { success: false, error: "Failed to parse Steam response." };
-    }
-
-    // Check for error tags in XML
-    if (xmlContent.includes("<error>")) {
-      const errMatch = xmlContent.match(/<error><!\[CDATA\[(.*?)\]\]><\/error>/) || xmlContent.match(/<error>(.*?)<\/error>/);
-      const rawError = errMatch ? errMatch[1] : "Steam profile error";
-      if (rawError.toLowerCase().includes("private")) {
-        return {
-          success: false,
-          error: "This Steam profile is Private. Please set 'Game Details' to 'Public' in your Steam Privacy Settings to play this mode."
-        };
-      }
-      return { success: false, error: rawError };
-    }
-
-    // Extract persona name & avatar if available
-    const nameMatch = xmlContent.match(/<steamID><!\[CDATA\[(.*?)\]\]><\/steamID>/) || xmlContent.match(/<steamID>(.*?)<\/steamID>/);
-    const avatarMatch = xmlContent.match(/<avatarIcon><!\[CDATA\[(.*?)\]\]><\/avatarIcon>/) || xmlContent.match(/<avatarIcon>(.*?)<\/avatarIcon>/);
-
-    const personaName = nameMatch ? nameMatch[1] : cleaned;
-    const avatar = avatarMatch ? avatarMatch[1] : null;
-
-    // Extract appIDs from XML: <appID>105600</appID>
-    const appMatches = [...xmlContent.matchAll(/<appID>(\d+)<\/appID>/g)];
-    const ownedAppIds = [...new Set(appMatches.map(m => m[1]))];
-
-    if (!ownedAppIds.length) {
+  // Check for privacy / error tags in XML
+  if (xmlContent.includes("<error>")) {
+    const errMatch = xmlContent.match(/<error><!\[CDATA\[(.*?)\]\]><\/error>/) || xmlContent.match(/<error>(.*?)<\/error>/);
+    const rawError = errMatch ? errMatch[1] : "Steam profile error";
+    if (rawError.toLowerCase().includes("private") || rawError.toLowerCase().includes("hidden")) {
       return {
         success: false,
-        error: "No games found on this profile, or your 'Game Details' privacy is not set to Public."
+        error: "This Steam profile is Private. Please set 'Game Details' to 'Public' in your Steam Privacy Settings."
       };
     }
+    return { success: false, error: rawError };
+  }
 
-    return {
-      success: true,
-      steamId: cleaned,
-      personaName,
-      avatar,
-      ownedAppIds,
-      totalOwned: ownedAppIds.length,
-    };
-  } catch (err) {
-    console.error("fetchSteamUserLibrary error:", err);
+  if (xmlContent.includes("<privacyState>private") || xmlContent.includes("<privacyState>friendsonly")) {
     return {
       success: false,
-      error: "Failed to fetch Steam library. Please verify the Steam ID or Custom URL and try again."
+      error: "This Steam profile's games are set to Private or Friends Only. Please set 'Game Details' to 'Public' in your Steam Privacy Settings."
     };
   }
+
+  // Extract persona name & avatar if available
+  const nameMatch = xmlContent.match(/<steamID><!\[CDATA\[(.*?)\]\]><\/steamID>/) || xmlContent.match(/<steamID>(.*?)<\/steamID>/);
+  const avatarMatch = xmlContent.match(/<avatarFull><!\[CDATA\[(.*?)\]\]><\/avatarFull>/) || xmlContent.match(/<avatarIcon><!\[CDATA\[(.*?)\]\]><\/avatarIcon>/);
+
+  const personaName = nameMatch ? nameMatch[1] : cleanedId;
+  const avatar = avatarMatch ? avatarMatch[1] : null;
+
+  // Extract appIDs from XML: app/12345, statsName>12345, <appID>105600</appID>
+  const appMatches = [...xmlContent.matchAll(/app\/(\d+)|statsName>(\d+)|<appID>(?:<!\[CDATA\[)?(\d+)(?:\]\]>)?<\/appID>/gi)];
+  const ownedAppIds = [...new Set(appMatches.map(m => m[1] || m[2] || m[3]))].filter(Boolean);
+
+  if (!ownedAppIds.length) {
+    return {
+      success: false,
+      error: "No games found on this profile, or your Steam 'Game Details' privacy is not set to Public."
+    };
+  }
+
+  return {
+    success: true,
+    steamId: cleanedId,
+    personaName,
+    avatar,
+    ownedAppIds,
+    totalOwned: ownedAppIds.length,
+  };
 }
+
+
 

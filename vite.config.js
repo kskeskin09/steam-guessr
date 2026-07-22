@@ -16,6 +16,11 @@ export default defineConfig({
         target: 'https://api.steampowered.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/steamuser/, '')
+      },
+      '/api/steamcommunity': {
+        target: 'https://steamcommunity.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/steamcommunity/, '')
       }
     }
   }
