@@ -11,6 +11,7 @@ export default function GameCard({ onScoreUpdate }) {
   const [currentGame, setCurrentGame] = useState(null);
   const [gameReviews, setGameReviews] = useState([]);
   const [isLoadingReviews, setIsLoadingReviews] = useState(true);
+  const [reviewError, setReviewError] = useState('');
   const [clueIndex, setClueIndex] = useState(0);
   const [attemptCount, setAttemptCount] = useState(1);
   const [userGuess, setUserGuess] = useState('');
@@ -37,6 +38,7 @@ export default function GameCard({ onScoreUpdate }) {
   const pickNewGame = async (overrideLangs, retryCount = 0) => {
     const langsToUse = Array.isArray(overrideLangs) ? overrideLangs : selectedLangs;
     setIsLoadingReviews(true);
+    setReviewError('');
     let pool = STEAM_GAMES_DATABASE;
     if (currentGame && STEAM_GAMES_DATABASE.length > 1) {
       pool = STEAM_GAMES_DATABASE.filter(g => g.id !== currentGame.id);
@@ -59,12 +61,14 @@ export default function GameCard({ onScoreUpdate }) {
     try {
       const liveReviews = await fetchLiveSteamReviews(randomGame.id, langsToUse);
       setGameReviews(liveReviews);
+      setReviewError('');
     } catch (err) {
-      console.warn(`Error fetching reviews for ${randomGame.title}:`, err);
-      if (retryCount < 3) {
+      console.warn(`Error fetching live Steam reviews for ${randomGame.title}:`, err);
+      if (retryCount < 2) {
         pickNewGame(overrideLangs, retryCount + 1);
       } else {
         setGameReviews([]);
+        setReviewError(`Steam sunucularından veya proxy kaynaklı canlı yorumlar yüklenemedi. Sitede kesinlikle sahte (fake) yorum gösterilmemektedir.`);
       }
     } finally {
       setIsLoadingReviews(false);
@@ -88,11 +92,16 @@ export default function GameCard({ onScoreUpdate }) {
     // Reload reviews for current game with new language selection
     if (currentGame) {
       setIsLoadingReviews(true);
+      setReviewError('');
       fetchLiveSteamReviews(currentGame.id, updated)
-        .then(liveReviews => setGameReviews(liveReviews))
+        .then(liveReviews => {
+          setGameReviews(liveReviews);
+          setReviewError('');
+        })
         .catch(err => {
           console.warn(err);
           setGameReviews([]);
+          setReviewError(`Seçilen dilde canlı Steam yorumu çekilemedi.`);
         })
         .finally(() => setIsLoadingReviews(false));
     }
@@ -253,13 +262,33 @@ export default function GameCard({ onScoreUpdate }) {
         )}
       </div>
 
-      {/* Loading State */}
+      {/* Loading State or Review Error */}
       {isLoadingReviews ? (
         <div className="steam-review-card" style={{ textAlign: 'center', padding: '3rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
           <Loader2 size={32} color="var(--steam-blue)" style={{ animation: 'spin 1s linear infinite' }} />
           <p style={{ color: 'var(--steam-text-muted)', fontSize: '0.9rem' }}>
             Fetching live Steam user reviews...
           </p>
+        </div>
+      ) : reviewError || gameReviews.length === 0 ? (
+        <div className="steam-review-card" style={{ textAlign: 'center', padding: '2.5rem 1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', border: '1px solid rgba(239, 68, 68, 0.35)', background: 'rgba(239, 68, 68, 0.04)', marginBottom: '1.25rem' }}>
+          <AlertTriangle size={36} color="#ef4444" />
+          <div>
+            <h3 style={{ color: '#ef4444', marginBottom: '0.4rem', fontSize: '1.1rem', fontWeight: 700 }}>Canlı Steam Yorumları Yüklenemedi</h3>
+            <p style={{ color: 'var(--steam-text-muted)', fontSize: '0.88rem', maxWidth: '480px', margin: '0 auto', lineHeight: '1.5' }}>
+              {reviewError || 'Steam API veya ağ engeli nedeniyle bu oyun için canlı yorum çekilemedi.'}
+              <br />
+              <strong style={{ color: '#cbd5e1', fontSize: '0.82rem' }}>Not: Sitede hiçbir sahte (fake) yorum gösterilmemektedir.</strong>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => pickNewGame()}
+            className="btn-steam-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', padding: '0.55rem 1.25rem' }}
+          >
+            <SkipForward size={16} /> Başka Bir Oyun Dene
+          </button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.25rem' }}>
