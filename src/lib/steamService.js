@@ -1,29 +1,29 @@
-// Steam API Service for Live Reviews (Strictly 100% Real Steam Reviews - No Fake/Fallback Reviews)
+// Steam API Service for Live Reviews (100% Real Steam Reviews)
 
 const CORS_PROXIES = [
-  // 1. AllOrigins GET wrapper
+  // 1. Direct AllOrigins GET wrapper
   async (url) => {
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return null;
     const json = await res.json();
     if (!json || !json.contents) return null;
     return typeof json.contents === 'string' ? JSON.parse(json.contents) : json.contents;
   },
-  // 2. CodeTabs Proxy
+  // 2. CorsProxy.io
   async (url) => {
-    const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return null;
     return await res.json();
   },
-  // 3. CorsProxy.org
+  // 3. CodeTabs Proxy
   async (url) => {
-    const res = await fetch(`https://corsproxy.org/?${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return null;
     return await res.json();
   },
-  // 4. ThingProxy
+  // 4. CorsProxy.org
   async (url) => {
-    const res = await fetch(`https://thingproxy.freeboard.io/fetch/${url}`, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(`https://corsproxy.org/?${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return null;
     return await res.json();
   }
@@ -67,40 +67,53 @@ async function fetchAvatarsForSteamIds(steamIds) {
  */
 async function fetchReviewsBatchForLang(appId, lang, cursor = '*') {
   const encodedCursor = encodeURIComponent(cursor);
-  const targetUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=${lang}&review_type=all&purchase_type=all&num_per_page=100&filter=all&cursor=${encodedCursor}`;
-  const localProxyUrl = `/api/steam/appreviews/${appId}?json=1&language=${lang}&review_type=all&purchase_type=all&num_per_page=100&filter=all&cursor=${encodedCursor}`;
+  const cacheBuster = `_cb=${Date.now()}`;
+  const filterTypes = ['all', 'summary', 'recent'];
 
-  // 1. Try Vite proxy if in local dev
-  try {
-    const res = await fetch(localProxyUrl, { signal: AbortSignal.timeout(3000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.reviews && data.reviews.length > 0) {
-        return { reviews: data.reviews, nextCursor: data.cursor || '*' };
-      }
-    }
-  } catch (err) {}
+  for (const filterType of filterTypes) {
+    const targetUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=${lang}&review_type=all&purchase_type=all&num_per_page=100&filter=${filterType}&cursor=${encodedCursor}&${cacheBuster}`;
+    const localProxyUrl = `/api/steam/appreviews/${appId}?json=1&language=${lang}&review_type=all&purchase_type=all&num_per_page=100&filter=${filterType}&cursor=${encodedCursor}&${cacheBuster}`;
 
-  // 2. Try CORS proxies
-  for (const proxyFn of CORS_PROXIES) {
+    // A. DIRECT FETCH (User's browser IP - Steam supports CORS headers directly on store.steampowered.com/appreviews)
     try {
-      const data = await proxyFn(targetUrl);
-      if (data && data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
-        return { reviews: data.reviews, nextCursor: data.cursor || '*' };
+      const res = await fetch(targetUrl, { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
+          return { reviews: data.reviews, nextCursor: data.cursor || '*' };
+        }
       }
     } catch (err) {}
+
+    // B. Local Vite Proxy (for localhost development)
+    try {
+      const res = await fetch(localProxyUrl, { signal: AbortSignal.timeout(3000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
+          return { reviews: data.reviews, nextCursor: data.cursor || '*' };
+        }
+      }
+    } catch (err) {}
+
+    // C. CORS Proxies
+    for (const proxyFn of CORS_PROXIES) {
+      try {
+        const data = await proxyFn(targetUrl);
+        if (data && data.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
+          return { reviews: data.reviews, nextCursor: data.cursor || '*' };
+        }
+      } catch (err) {}
+    }
   }
 
   return { reviews: [], nextCursor: '*' };
 }
 
 /**
- * Fetches live reviews directly from Steam AppReviews API.
- * NO FAKE REVIEWS: Throws an error if real Steam reviews cannot be loaded.
+ * Helper to fetch valid reviews for specified languages
  */
-export async function fetchLiveSteamReviews(appId, languages = ['english', 'turkish']) {
-  const selectedLangs = (languages && languages.length > 0) ? languages : ['english', 'turkish'];
-  
+async function fetchReviewsForLangs(appId, selectedLangs) {
   const validReviews = [];
   const seenIds = new Set();
   
@@ -130,9 +143,7 @@ export async function fetchLiveSteamReviews(appId, languages = ['english', 'turk
       }
     });
 
-    if (langBatches.length === 0) {
-      break;
-    }
+    if (langBatches.length === 0) break;
 
     const maxLen = Math.max(...langBatches.map(b => b.length));
     for (let i = 0; i < maxLen; i++) {
@@ -144,9 +155,7 @@ export async function fetchLiveSteamReviews(appId, languages = ['english', 'turk
         if (!rawText) continue;
 
         const lineCount = rawText.split('\n').length;
-        if (rawText.length < 10 || rawText.length > 400 || lineCount > 10) {
-          continue;
-        }
+        if (rawText.length < 10 || rawText.length > 400 || lineCount > 10) continue;
 
         seenIds.add(rev.recommendationid);
 
@@ -171,9 +180,32 @@ export async function fetchLiveSteamReviews(appId, languages = ['english', 'turk
     }
   }
 
+  return validReviews;
+}
+
+/**
+ * Fetches live reviews directly from Steam AppReviews API.
+ * NO FAKE DATA: Strictly 100% real Steam reviews.
+ */
+export async function fetchLiveSteamReviews(appId, languages = ['english', 'turkish']) {
+  let selectedLangs = (languages && languages.length > 0) ? languages : ['english', 'turkish'];
+  
+  // 1. Try requested languages
+  let validReviews = await fetchReviewsForLangs(appId, selectedLangs);
+
+  // 2. If 0 reviews found (e.g. game has 0 Turkish reviews), try English live Steam reviews
+  if (validReviews.length === 0 && !selectedLangs.includes('english')) {
+    validReviews = await fetchReviewsForLangs(appId, ['english']);
+  }
+
+  // 3. If still 0 reviews, try all languages on Steam
+  if (validReviews.length === 0) {
+    validReviews = await fetchReviewsForLangs(appId, ['all']);
+  }
+
   // Strictly no fake data: if 0 valid real Steam reviews were fetched, throw error
   if (validReviews.length === 0) {
-    throw new Error(`Steam yorumları bu oyun için çekilemedi (AppID: ${appId}). Ağ veya bağlantı engeli olabilir.`);
+    throw new Error(`Steam sunucularından bu oyun için canlı yorum çekilemedi (AppID: ${appId}).`);
   }
 
   const target10 = validReviews.slice(0, 10);
