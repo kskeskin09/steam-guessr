@@ -142,3 +142,82 @@ export async function fetchLiveSteamReviews(appId, languages = ["english", "turk
 
   return reviews;
 }
+
+export async function fetchSteamUserLibrary(steamIdInput) {
+  if (!steamIdInput || !steamIdInput.trim()) {
+    return { success: false, error: "Please enter a valid Steam ID or Custom Profile URL." };
+  }
+
+  let cleaned = steamIdInput.trim();
+  // Strip trailing slashes or full URLs if pasted
+  cleaned = cleaned.replace(/^(https?:\/\/)?steamcommunity\.com\/(id|profiles)\//, '').replace(/\/+$/, '');
+
+  const isNumeric = /^\d{17}$/.test(cleaned);
+  const xmlUrl = isNumeric
+    ? `https://steamcommunity.com/profiles/${cleaned}/games?tab=all&xml=1`
+    : `https://steamcommunity.com/id/${cleaned}/games?tab=all&xml=1`;
+
+  try {
+    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(xmlUrl)}`, {
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!res.ok) {
+      return { success: false, error: "Unable to reach Steam services. Please check your connection." };
+    }
+
+    const json = await res.json();
+    const xmlContent = json?.contents;
+
+    if (!xmlContent || typeof xmlContent !== "string") {
+      return { success: false, error: "Failed to parse Steam response." };
+    }
+
+    // Check for error tags in XML
+    if (xmlContent.includes("<error>")) {
+      const errMatch = xmlContent.match(/<error><!\[CDATA\[(.*?)\]\]><\/error>/) || xmlContent.match(/<error>(.*?)<\/error>/);
+      const rawError = errMatch ? errMatch[1] : "Steam profile error";
+      if (rawError.toLowerCase().includes("private")) {
+        return {
+          success: false,
+          error: "This Steam profile is Private. Please set 'Game Details' to 'Public' in your Steam Privacy Settings to play this mode."
+        };
+      }
+      return { success: false, error: rawError };
+    }
+
+    // Extract persona name & avatar if available
+    const nameMatch = xmlContent.match(/<steamID><!\[CDATA\[(.*?)\]\]><\/steamID>/) || xmlContent.match(/<steamID>(.*?)<\/steamID>/);
+    const avatarMatch = xmlContent.match(/<avatarIcon><!\[CDATA\[(.*?)\]\]><\/avatarIcon>/) || xmlContent.match(/<avatarIcon>(.*?)<\/avatarIcon>/);
+
+    const personaName = nameMatch ? nameMatch[1] : cleaned;
+    const avatar = avatarMatch ? avatarMatch[1] : null;
+
+    // Extract appIDs from XML: <appID>105600</appID>
+    const appMatches = [...xmlContent.matchAll(/<appID>(\d+)<\/appID>/g)];
+    const ownedAppIds = [...new Set(appMatches.map(m => m[1]))];
+
+    if (!ownedAppIds.length) {
+      return {
+        success: false,
+        error: "No games found on this profile, or your 'Game Details' privacy is not set to Public."
+      };
+    }
+
+    return {
+      success: true,
+      steamId: cleaned,
+      personaName,
+      avatar,
+      ownedAppIds,
+      totalOwned: ownedAppIds.length,
+    };
+  } catch (err) {
+    console.error("fetchSteamUserLibrary error:", err);
+    return {
+      success: false,
+      error: "Failed to fetch Steam library. Please verify the Steam ID or Custom URL and try again."
+    };
+  }
+}
+

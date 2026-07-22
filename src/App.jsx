@@ -145,7 +145,7 @@ export default function App() {
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2rem' }}>
         {/* Main Game Arena */}
-        <GameCard onScoreUpdate={handleScoreUpdate} />
+        <GameCard user={user} onScoreUpdate={handleScoreUpdate} />
       </main>
 
       {/* Footer */}

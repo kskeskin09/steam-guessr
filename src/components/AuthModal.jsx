@@ -56,7 +56,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       }
     } catch (err) {
       if (err.message && err.message.toLowerCase().includes('rate limit')) {
-        setErrorMsg('Supabase e-posta gönderim limiti aşıldı. Lütfen Supabase panelinden "Confirm email" seçeneğini kapatın veya biraz bekleyin.');
+        setErrorMsg('Supabase email rate limit exceeded. Please disable "Confirm email" in Supabase settings or wait a few minutes.');
       } else {
         setErrorMsg(err.message || 'An error occurred during authentication.');
       }

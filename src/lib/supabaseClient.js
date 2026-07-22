@@ -142,3 +142,41 @@ export const fetchLeaderboard = async () => {
     return [];
   }
 };
+
+// Save user's Steam ID / Custom URL to profile table
+export const saveUserSteamId = async (user, steamId) => {
+  if (!supabase || !user) return false;
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ steam_id: steamId, updated_at: new Date().toISOString() })
+      .eq('id', user.id);
+
+    if (error) {
+      console.warn("Supabase steam_id update warning:", error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("Failed to save steam_id to Supabase profile:", e);
+    return false;
+  }
+};
+
+// Fetch user's Steam ID / Custom URL from profile table
+export const getUserSteamId = async (userId) => {
+  if (!supabase || !userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('steam_id')
+      .eq('id', userId)
+      .single();
+
+    if (error) return null;
+    return data?.steam_id || null;
+  } catch (e) {
+    return null;
+  }
+};
+
