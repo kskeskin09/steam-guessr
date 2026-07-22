@@ -81,7 +81,7 @@ export default function GameCard({ user, onScoreUpdate }) {
     initSteamId();
 
     return () => { active = false; };
-  }, [user]);
+  }, [user?.id]);
 
   // Load owned Steam games library
   const loadLibrary = async (targetSteamId) => {
@@ -100,8 +100,11 @@ export default function GameCard({ user, onScoreUpdate }) {
     if (!res.success) {
       setLibraryError(res.error);
       setIsFetchingLibrary(false);
-      setUserLibraryGames([]);
-      setUserLibraryInfo(null);
+      // Only clear library data if it's a fresh sync attempt (not a resync of same ID)
+      if (targetSteamId !== steamId) {
+        setUserLibraryGames([]);
+        setUserLibraryInfo(null);
+      }
       return;
     }
 
@@ -305,9 +308,9 @@ export default function GameCard({ user, onScoreUpdate }) {
       setUserGuess('');
       setShowDropdown(false);
 
-      const maxClues = Math.min(10, gameReviews.length || 10);
+      const maxC = Math.max(1, Math.min(10, gameReviews.length || 10));
 
-      if (attemptCount >= maxClues || clueIndex >= maxClues - 1) {
+      if (attemptCount >= maxC || clueIndex >= maxC - 1) {
         setGameStatus('lost');
         onScoreUpdate(0, false);
       } else {
@@ -318,8 +321,8 @@ export default function GameCard({ user, onScoreUpdate }) {
   };
 
   const handlePassClue = () => {
-    const maxClues = Math.min(10, gameReviews.length || 10);
-    if (gameStatus !== 'playing' || !currentGame || isLoadingReviews || attemptCount >= maxClues || clueIndex >= maxClues - 1) return;
+    const maxC = isLoadingReviews ? 10 : Math.max(1, Math.min(10, gameReviews.length || 10));
+    if (gameStatus !== 'playing' || !currentGame || isLoadingReviews || attemptCount >= maxC || clueIndex >= maxC - 1) return;
     setNotFoundError('');
     setUserGuess('');
     setShowDropdown(false);
@@ -333,8 +336,8 @@ export default function GameCard({ user, onScoreUpdate }) {
     onScoreUpdate(0, false);
   };
 
-  const maxClues = Math.min(10, gameReviews.length || 10);
-  const isLastClue = attemptCount >= maxClues || clueIndex >= maxClues - 1;
+  const maxClues = isLoadingReviews ? 10 : Math.max(1, Math.min(10, gameReviews.length || 10));
+  const isLastClue = !isLoadingReviews && (attemptCount >= maxClues || clueIndex >= maxClues - 1);
   const nextPotentialPoints = calculatePoints(attemptCount);
   const revealedReviews = gameReviews.slice(0, clueIndex + 1);
 
@@ -650,9 +653,9 @@ export default function GameCard({ user, onScoreUpdate }) {
 
                   {/* Review Text */}
                   <div className="steam-review-content">
-                    <div className="steam-posted-date">
-                      Posted: {rev.postedDate || 'Jan 1 @ 8:36am'}
-                    </div>
+                    {rev.postedDate && (
+                      <div className="steam-posted-date">Posted: {rev.postedDate}</div>
+                    )}
                     <div className="steam-review-text">
                       {rev.text}
                     </div>
@@ -683,6 +686,7 @@ export default function GameCard({ user, onScoreUpdate }) {
                       value={userGuess}
                       onChange={handleInputChange}
                       onFocus={() => userGuess.length > 0 && setShowDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
                     />
                     <Search size={18} color="var(--steam-text-muted)" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
                   </div>
@@ -767,7 +771,7 @@ export default function GameCard({ user, onScoreUpdate }) {
                 </p>
               )}
 
-              <button className="btn-primary" onClick={() => pickNewGame()} style={{ marginTop: '1rem', padding: '0.7rem 1.8rem', fontSize: '1rem' }}>
+              <button className="btn-primary" onClick={() => pickNewGame(selectedLangs, 0, gameMode, userLibraryGames)} style={{ marginTop: '1rem', padding: '0.7rem 1.8rem', fontSize: '1rem' }}>
                 <span>Next Game</span>
                 <ArrowRight size={18} />
               </button>

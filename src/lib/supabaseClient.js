@@ -38,7 +38,7 @@ export const saveUserScore = async (user, pointsGained) => {
   if (!supabase || !user) return null;
 
   try {
-    const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Oyuncu';
+    const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Player';
 
     // 1. Ensure profile row exists
     const { data: existingProfile } = await supabase
@@ -87,7 +87,7 @@ export const mergeGuestStats = async (user, guestScore, guestGames) => {
   if (guestScore <= 0 && guestGames <= 0) return null;
 
   try {
-    const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Oyuncu';
+    const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Player';
 
     const { data: existingProfile } = await supabase
       .from('profiles')

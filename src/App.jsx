@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import GameCard from './components/GameCard';
 import LeaderboardModal from './components/LeaderboardModal';
@@ -24,8 +24,14 @@ export default function App() {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
 
   // Handle user login and merge any guest session stats
+  const lastProcessedUserIdRef = useRef(null);
+
   const handleUserLogin = async (loggedInUser) => {
     if (!loggedInUser || !supabase) return;
+    // Skip if same user was already processed (avoids game reset on token refresh)
+    if (lastProcessedUserIdRef.current === loggedInUser.id) return;
+    lastProcessedUserIdRef.current = loggedInUser.id;
+
     setUser(loggedInUser);
 
     const sScore = parseInt(sessionStorage.getItem('steam_guesser_guest_score') || '0', 10) || guestScore;
@@ -57,7 +63,10 @@ export default function App() {
         }
       });
 
-      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+        // Ignore token refreshes (fires when switching back to tab) and other background events
+        if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return;
+
         const u = session?.user || null;
         if (u) {
           handleUserLogin(u);
@@ -121,6 +130,7 @@ export default function App() {
   const handleLogout = async () => {
     if (supabase) {
       await supabase.auth.signOut();
+      lastProcessedUserIdRef.current = null;
       setUser(null);
       setTotalScore(0);
       setGamesPlayed(0);

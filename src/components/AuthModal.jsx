@@ -40,7 +40,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
           onAuthSuccess(data.user);
           onClose();
         } else {
-          alert('Registration successful! You can now sign in.');
+          setErrorMsg('Registration submitted! If email confirmation is required, please check your inbox before signing in.');
           setIsRegister(false);
         }
       } else {
