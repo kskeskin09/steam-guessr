@@ -39,13 +39,13 @@ export default function GameCard({ onScoreUpdate }) {
     const langsToUse = Array.isArray(overrideLangs) ? overrideLangs : selectedLangs;
     setIsLoadingReviews(true);
     setReviewError('');
+
     let pool = STEAM_GAMES_DATABASE;
     if (currentGame && STEAM_GAMES_DATABASE.length > 1) {
       pool = STEAM_GAMES_DATABASE.filter(g => g.id !== currentGame.id);
     }
 
     const randomGame = pool[Math.floor(Math.random() * pool.length)];
-
     setCurrentGame(randomGame);
     setClueIndex(0);
     setAttemptCount(1);
@@ -62,16 +62,18 @@ export default function GameCard({ onScoreUpdate }) {
       const liveReviews = await fetchLiveSteamReviews(randomGame.id, langsToUse);
       setGameReviews(liveReviews);
       setReviewError('');
+      setIsLoadingReviews(false);
     } catch (err) {
-      console.warn(`Error fetching live Steam reviews for ${randomGame.title}:`, err);
-      if (retryCount < 2) {
+      console.warn(`Steam review fetch failed for ${randomGame.title}:`, err);
+      if (retryCount < 1) {
+        // Try once more with a different random game
+        setIsLoadingReviews(false);
         pickNewGame(overrideLangs, retryCount + 1);
       } else {
         setGameReviews([]);
-        setReviewError(`Steam sunucularından veya proxy kaynaklı canlı yorumlar yüklenemedi. Sitede kesinlikle sahte (fake) yorum gösterilmemektedir.`);
+        setReviewError(`Steam sunucularından canlı yorumlar yüklenemedi. Ağ bağlantınızı kontrol edin veya farklı bir oyun deneyin.`);
+        setIsLoadingReviews(false);
       }
-    } finally {
-      setIsLoadingReviews(false);
     }
   };
 
