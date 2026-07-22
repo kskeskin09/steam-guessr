@@ -71,7 +71,7 @@ export default function GameCard({ onScoreUpdate }) {
         pickNewGame(overrideLangs, retryCount + 1);
       } else {
         setGameReviews([]);
-        setReviewError(`Steam sunucularından canlı yorumlar yüklenemedi. Ağ bağlantınızı kontrol edin veya farklı bir oyun deneyin.`);
+        setReviewError(`Failed to load live Steam reviews. Check your connection or try a different game.`);
         setIsLoadingReviews(false);
       }
     }
@@ -103,7 +103,7 @@ export default function GameCard({ onScoreUpdate }) {
         .catch(err => {
           console.warn(err);
           setGameReviews([]);
-          setReviewError(`Seçilen dilde canlı Steam yorumu çekilemedi.`);
+          setReviewError(`Could not load live Steam reviews for the selected language.`);
         })
         .finally(() => setIsLoadingReviews(false));
     }
@@ -276,11 +276,9 @@ export default function GameCard({ onScoreUpdate }) {
         <div className="steam-review-card" style={{ textAlign: 'center', padding: '2.5rem 1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', border: '1px solid rgba(239, 68, 68, 0.35)', background: 'rgba(239, 68, 68, 0.04)', marginBottom: '1.25rem' }}>
           <AlertTriangle size={36} color="#ef4444" />
           <div>
-            <h3 style={{ color: '#ef4444', marginBottom: '0.4rem', fontSize: '1.1rem', fontWeight: 700 }}>Canlı Steam Yorumları Yüklenemedi</h3>
+            <h3 style={{ color: '#ef4444', marginBottom: '0.4rem', fontSize: '1.1rem', fontWeight: 700 }}>Could Not Load Steam Reviews</h3>
             <p style={{ color: 'var(--steam-text-muted)', fontSize: '0.88rem', maxWidth: '480px', margin: '0 auto', lineHeight: '1.5' }}>
-              {reviewError || 'Steam API veya ağ engeli nedeniyle bu oyun için canlı yorum çekilemedi.'}
-              <br />
-              <strong style={{ color: '#cbd5e1', fontSize: '0.82rem' }}>Not: Sitede hiçbir sahte (fake) yorum gösterilmemektedir.</strong>
+              {reviewError || 'Live Steam reviews could not be fetched for this game.'}
             </p>
           </div>
           <button
@@ -289,7 +287,7 @@ export default function GameCard({ onScoreUpdate }) {
             className="btn-steam-primary"
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', padding: '0.55rem 1.25rem' }}
           >
-            <SkipForward size={16} /> Başka Bir Oyun Dene
+            <SkipForward size={16} /> Try Another Game
           </button>
         </div>
       ) : (
