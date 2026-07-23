@@ -67,4 +67,6 @@ Can you guess the Steam game from user reviews? Test your gaming knowledge and s
 
 ## 📄 License
 
-[MIT](LICENSE)
+This project is licensed under the [MIT License](LICENSE) © 2026 kskeskin09.
+
+
