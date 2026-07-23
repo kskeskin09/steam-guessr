@@ -14,6 +14,8 @@ serve(async (req) => {
     const url = new URL(req.url);
     const appId = url.searchParams.get("appid");
     const lang = url.searchParams.get("lang") || "english";
+    const num = url.searchParams.get("num_per_page") || "50";
+    const filter = url.searchParams.get("filter") || "all";
 
     if (!appId) {
       return new Response(JSON.stringify({ error: "Missing appid" }), {
@@ -22,7 +24,7 @@ serve(async (req) => {
       });
     }
 
-    const steamUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=${lang}&num_per_page=20&filter=recent&review_type=all&purchase_type=all`;
+    const steamUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=${lang}&num_per_page=${num}&filter=${filter}&review_type=all&purchase_type=all`;
 
     const steamRes = await fetch(steamUrl, {
       headers: {

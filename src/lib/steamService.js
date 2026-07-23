@@ -3,47 +3,67 @@
 const SUPABASE_URL = "https://wgsjygplvgukrqmfcjtf.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indnc2p5Z3Bsdmd1a3JxbWZjanRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3MjcxNjIsImV4cCI6MjEwMDMwMzE2Mn0.KBuQDPmrVozT7GJnPJJnxJnREqhSGmO3gFGmpd6l68Y";
 
+// Helper: Fisher-Yates shuffle algorithm for randomizing reviews
+function shuffleArray(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 async function fetchReviewsForLang(appId, lang) {
-  // 1. Primary: Supabase Edge Function (server-side, bypasses CORS/Cloudflare)
-  try {
-    const fnUrl = `${SUPABASE_URL}/functions/v1/steam-reviews?appid=${appId}&lang=${lang}`;
-    const res = await fetch(fnUrl, {
-      signal: AbortSignal.timeout(8000),
-      headers: {
-        "apikey": SUPABASE_ANON_KEY,
-        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.reviews?.length > 0) return data.reviews;
-    }
-  } catch (_) {}
+  const fetchSingleFilter = async (filterMode) => {
+    // 1. Primary: Supabase Edge Function (server-side, bypasses CORS/Cloudflare)
+    try {
+      const fnUrl = `${SUPABASE_URL}/functions/v1/steam-reviews?appid=${appId}&lang=${lang}&num_per_page=100&filter=${filterMode}`;
+      const res = await fetch(fnUrl, {
+        signal: AbortSignal.timeout(8000),
+        headers: {
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.reviews?.length > 0) return data.reviews;
+      }
+    } catch (_) {}
 
-  // 2. Fallback: Local Vite dev proxy (works during npm run dev)
-  try {
-    const localUrl = `/api/steam/appreviews/${appId}?json=1&language=${lang}&num_per_page=20&filter=recent&review_type=all&purchase_type=all`;
-    const res = await fetch(localUrl, { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.reviews?.length > 0) return data.reviews;
-    }
-  } catch (_) {}
+    // 2. Fallback: Local Vite dev proxy (works during npm run dev)
+    try {
+      const localUrl = `/api/steam/appreviews/${appId}?json=1&language=${lang}&num_per_page=100&filter=${filterMode}&review_type=all&purchase_type=all`;
+      const res = await fetch(localUrl, { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.reviews?.length > 0) return data.reviews;
+      }
+    } catch (_) {}
 
-  // 3. Last resort: allorigins proxy
-  try {
-    const steamUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=${lang}&num_per_page=20&filter=recent&review_type=all&purchase_type=all`;
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(steamUrl)}`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (res.ok) {
-      const json = await res.json();
-      const data = typeof json.contents === "string" ? JSON.parse(json.contents) : json.contents;
-      if (data?.reviews?.length > 0) return data.reviews;
-    }
-  } catch (_) {}
+    // 3. Last resort: allorigins proxy
+    try {
+      const steamUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=${lang}&num_per_page=100&filter=${filterMode}&review_type=all&purchase_type=all`;
+      const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(steamUrl)}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const data = typeof json.contents === "string" ? JSON.parse(json.contents) : json.contents;
+        if (data?.reviews?.length > 0) return data.reviews;
+      }
+    } catch (_) {}
 
-  return [];
+    return [];
+  };
+
+  // Fetch both 'all' (most helpful) and 'recent' (newest) in parallel for maximum pool size (up to 200 per lang)
+  const results = await Promise.all([
+    fetchSingleFilter("all"),
+    fetchSingleFilter("recent"),
+  ]);
+
+  return results.flat();
 }
 
 function parseReview(rev) {
@@ -91,56 +111,55 @@ async function fetchAvatarsForSteamIds(steamIds) {
 export async function fetchLiveSteamReviews(appId, languages = ["english", "turkish"]) {
   const langs = languages?.length ? languages : ["english", "turkish"];
   const seenIds = new Set();
-  const reviews = [];
+  const validReviews = [];
 
   // Fetch all languages in parallel
   const rawBatches = await Promise.all(langs.map((lang) => fetchReviewsForLang(appId, lang)));
 
-  // Interleave: en, tr, en, tr...
-  const batches = rawBatches.filter((b) => b.length > 0);
-
-  if (batches.length > 0) {
-    const maxLen = Math.max(...batches.map((b) => b.length));
-    outer: for (let i = 0; i < maxLen; i++) {
-      for (const batch of batches) {
-        if (reviews.length >= 10) break outer;
-        const rev = batch[i];
-        if (!rev || seenIds.has(rev.recommendationid)) continue;
-        const parsed = parseReview(rev);
-        if (!parsed) continue;
-        seenIds.add(rev.recommendationid);
-        reviews.push(parsed);
-      }
+  // Collect all unique valid reviews across languages
+  for (const batch of rawBatches) {
+    if (!batch || !batch.length) continue;
+    for (const rev of batch) {
+      if (!rev || seenIds.has(rev.recommendationid)) continue;
+      const parsed = parseReview(rev);
+      if (!parsed) continue;
+      seenIds.add(rev.recommendationid);
+      validReviews.push(parsed);
     }
   }
 
   // If selected langs returned nothing and English wasn't already tried, try English
-  if (reviews.length === 0 && !langs.includes("english")) {
+  if (validReviews.length === 0 && !langs.includes("english")) {
     const enBatch = await fetchReviewsForLang(appId, "english");
     for (const rev of enBatch) {
-      if (reviews.length >= 10) break;
-      if (seenIds.has(rev.recommendationid)) continue;
+      if (!rev || seenIds.has(rev.recommendationid)) continue;
       const parsed = parseReview(rev);
       if (!parsed) continue;
       seenIds.add(rev.recommendationid);
-      reviews.push(parsed);
+      validReviews.push(parsed);
     }
   }
 
-  if (reviews.length === 0) {
+  if (validReviews.length === 0) {
     throw new Error(`Could not load live Steam reviews for this game (AppID: ${appId}).`);
   }
 
-  // Enrich avatars
-  const steamIds = reviews.map((r) => r.steamId).filter(Boolean);
+  // Randomize reviews using Fisher-Yates shuffle
+  const shuffled = shuffleArray(validReviews);
+
+  // Take top 10 random reviews from the shuffled list
+  const selectedReviews = shuffled.slice(0, 10);
+
+  // Enrich avatars for the 10 selected reviews
+  const steamIds = selectedReviews.map((r) => r.steamId).filter(Boolean);
   if (steamIds.length > 0) {
     const avatarMap = await fetchAvatarsForSteamIds(steamIds);
-    reviews.forEach((rev) => {
+    selectedReviews.forEach((rev) => {
       if (rev.steamId && avatarMap[rev.steamId]) rev.avatar = avatarMap[rev.steamId];
     });
   }
 
-  return reviews;
+  return selectedReviews;
 }
 
 export async function fetchSteamUserLibrary(steamIdInput) {
