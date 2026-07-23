@@ -66,6 +66,8 @@ export default function GameCard({ user, onScoreUpdate }) {
 
   const inputRef = useRef(null);
   const bottomRef = useRef(null);
+  const latestRequestIdRef = useRef(0);
+  const libraryFetchedForIdRef = useRef(null);
 
   // Load Steam ID on mount or user change
   useEffect(() => {
@@ -84,7 +86,9 @@ export default function GameCard({ user, onScoreUpdate }) {
       if (active && savedId) {
         setSteamId(savedId);
         setInputSteamId(savedId);
-        loadLibrary(savedId);
+        if (libraryFetchedForIdRef.current !== savedId) {
+          loadLibrary(savedId, false);
+        }
       } else if (active && gameMode === 'steam_library') {
         setIsEditingSteamId(true);
       }
@@ -96,7 +100,7 @@ export default function GameCard({ user, onScoreUpdate }) {
   }, [user?.id]);
 
   // Load owned Steam games library
-  const loadLibrary = async (targetSteamId) => {
+  const loadLibrary = async (targetSteamId, isManualSync = false) => {
     const idToFetch = targetSteamId || steamId || inputSteamId;
     if (!idToFetch || !idToFetch.trim()) {
       setLibraryError('Please provide a valid Steam ID or Custom Profile URL.');
@@ -119,6 +123,8 @@ export default function GameCard({ user, onScoreUpdate }) {
       }
       return;
     }
+
+    libraryFetchedForIdRef.current = res.steamId;
 
     const ownedSet = new Set(res.ownedAppIds.map(id => String(id)));
     const matchedGames = STEAM_GAMES_DATABASE.filter(g => ownedSet.has(String(g.id)));
@@ -143,13 +149,14 @@ export default function GameCard({ user, onScoreUpdate }) {
       saveUserSteamId(user, res.steamId);
     }
 
-    if (matchedGames.length > 0 && gameMode === 'steam_library') {
+    if (matchedGames.length > 0 && gameMode === 'steam_library' && (isManualSync || !currentGame)) {
       pickNewGame(selectedLangs, 0, 'steam_library', matchedGames);
     }
   };
 
   // Main game picking logic
   const pickNewGame = async (overrideLangs, retryCount = 0, overrideMode, overrideLibraryGames) => {
+    const requestId = ++latestRequestIdRef.current;
     const modeToUse = overrideMode || gameMode;
     const langsToUse = Array.isArray(overrideLangs) ? overrideLangs : selectedLangs;
 
@@ -160,8 +167,10 @@ export default function GameCard({ user, onScoreUpdate }) {
     if (modeToUse === 'steam_library') {
       pool = overrideLibraryGames || userLibraryGames;
       if (!pool || pool.length === 0) {
-        setCurrentGame(null);
-        setIsLoadingReviews(false);
+        if (requestId === latestRequestIdRef.current) {
+          setCurrentGame(null);
+          setIsLoadingReviews(false);
+        }
         return;
       }
     }
@@ -172,6 +181,9 @@ export default function GameCard({ user, onScoreUpdate }) {
     }
 
     const randomGame = selectablePool[Math.floor(Math.random() * selectablePool.length)];
+
+    if (requestId !== latestRequestIdRef.current) return;
+
     setCurrentGame(randomGame);
     setClueIndex(0);
     setAttemptCount(1);
@@ -186,10 +198,12 @@ export default function GameCard({ user, onScoreUpdate }) {
 
     try {
       const liveReviews = await fetchLiveSteamReviews(randomGame.id, langsToUse);
+      if (requestId !== latestRequestIdRef.current) return;
       setGameReviews(liveReviews);
       setReviewError('');
       setIsLoadingReviews(false);
     } catch (err) {
+      if (requestId !== latestRequestIdRef.current) return;
       console.warn(`Steam review fetch failed for ${randomGame.title}:`, err);
       if (retryCount < 1) {
         setIsLoadingReviews(false);
@@ -212,7 +226,7 @@ export default function GameCard({ user, onScoreUpdate }) {
       } else if (userLibraryGames.length > 0) {
         pickNewGame(selectedLangs, 0, 'steam_library', userLibraryGames);
       } else {
-        loadLibrary(steamId);
+        loadLibrary(steamId, true);
       }
     } else {
       pickNewGame(selectedLangs, 0, 'all');
@@ -234,21 +248,28 @@ export default function GameCard({ user, onScoreUpdate }) {
     } catch (e) {}
 
     if (currentGame) {
+      const requestId = ++latestRequestIdRef.current;
       setIsLoadingReviews(true);
       setReviewError('');
       setClueIndex(0);
       setFailedAvatars({});
       fetchLiveSteamReviews(currentGame.id, updated)
         .then(liveReviews => {
+          if (requestId !== latestRequestIdRef.current) return;
           setGameReviews(liveReviews);
           setReviewError('');
         })
         .catch(err => {
+          if (requestId !== latestRequestIdRef.current) return;
           console.warn(err);
           setGameReviews([]);
           setReviewError(`Could not load live Steam reviews for the selected language.`);
         })
-        .finally(() => setIsLoadingReviews(false));
+        .finally(() => {
+          if (requestId === latestRequestIdRef.current) {
+            setIsLoadingReviews(false);
+          }
+        });
     }
   };
 
