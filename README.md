@@ -16,16 +16,17 @@ Can you guess the Steam game from user reviews? Test your gaming knowledge and s
    - **2nd attempt:** 50 points
    - **3rd attempt:** 33 points
    - **4th attempt:** 25 points
+      You have 10 attempts.
 5. Keep your streak alive and climb the leaderboard!
 
 ---
 
 ## ✨ Features
 
-- **Progressive Hints:** Reveal up to 4 real user reviews per game to narrow down your guess.
+- **Progressive Hints:** Reveal up to 10 real user reviews per game to narrow down your guess.
 - **Seamless Guest Session:** Play instantly without logging in. Your score automatically merges when you decide to sign up.
 - **Global Leaderboard:** Compete for the top total and high scores using Supabase backend.
-- **Smart Search:** Fast fuzzy search to quickly pick games from the list.
+- **Import Your Own Steam Library** You can import your Steam library and try your luck only with the games you own.
 
 ---
 
@@ -68,5 +69,4 @@ Can you guess the Steam game from user reviews? Test your gaming knowledge and s
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE) © 2026 kskeskin09.
-
 
