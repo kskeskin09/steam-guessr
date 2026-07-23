@@ -16,6 +16,7 @@ Can you guess the Steam game from user reviews? Test your gaming knowledge and s
    - **2nd attempt:** 50 points
    - **3rd attempt:** 33 points
    - **4th attempt:** 25 points
+   
       You have 10 attempts.
 5. Keep your streak alive and climb the leaderboard!
 
